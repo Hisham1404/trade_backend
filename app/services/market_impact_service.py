@@ -8,7 +8,7 @@ market impact of news events on assets and portfolios.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from sqlalchemy.orm import Session
 
 from app.analysis.market_impact import (
@@ -16,13 +16,10 @@ from app.analysis.market_impact import (
     PredictiveImpactAnalyzer,
     NewsEvent,
     ImpactScore,
-    EventCategory,
     create_news_event_from_db,
     calculate_portfolio_impact
 )
 from app.analysis.sentiment_engine import SentimentEngine
-from app.models.asset import Asset
-from app.models.alert import Alert
 from app.database.connection import get_db
 from fastapi import Depends
 

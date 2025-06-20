@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from app.services.logging_service import get_logger
 from app.services.health_service import health_checker, HealthStatus
 from app.services.metrics_service import metrics_registry
-from app.services.alerting_service import alerting_service
+# from app.services.alerting_service import alerting_service
 
 logger = get_logger(__name__)
 
@@ -157,6 +157,7 @@ class MonitoringService:
             now - self.last_alert_check >= timedelta(seconds=self.alert_check_interval)):
             
             try:
+                from app.services.alerting_service import alerting_service
                 start_time = time.time()
                 triggered_alerts = await alerting_service.check_alerts()
                 check_duration = time.time() - start_time
@@ -242,6 +243,7 @@ class MonitoringService:
     
     async def get_monitoring_status(self) -> Dict[str, Any]:
         """Get current monitoring service status."""
+        from app.services.alerting_service import alerting_service
         return {
             "is_running": self.is_running,
             "check_interval": self.check_interval,
@@ -274,6 +276,7 @@ class MonitoringService:
         logger.info("Manual alert check triggered")
         
         try:
+            from app.services.alerting_service import alerting_service
             triggered_alerts = await alerting_service.check_alerts()
             self.last_alert_check = datetime.utcnow()
             

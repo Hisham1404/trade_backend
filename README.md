@@ -163,9 +163,9 @@ uvicorn app.main:app --reload
 - `GET /api/v1/auth/me` - Get current user
 
 ### Portfolio Management
-- `GET /api/v1/portfolio/assets` - List portfolio assets
-- `POST /api/v1/portfolio/assets` - Add asset to portfolio
-- `DELETE /api/v1/portfolio/assets/{id}` - Remove asset
+- `GET /api/v1/portfolios/assets` - List portfolio assets
+- `POST /api/v1/portfolios/assets` - Add asset to portfolio
+- `DELETE /api/v1/portfolios/assets/{id}` - Remove asset
 
 ### Alerts
 - `GET /api/v1/alerts` - Get recent alerts
@@ -195,7 +195,7 @@ import requests
 
 # Add NIFTY index to portfolio
 response = requests.post(
-    "http://localhost:8000/api/v1/portfolio/assets",
+    "http://localhost:8000/api/v1/portfolios/assets",
     headers={"X-API-Key": "your-api-key"},
     json={
         "symbol": "NIFTY",

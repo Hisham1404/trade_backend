@@ -52,6 +52,8 @@ class Alert(Base):
     
     # Relationships
     user = relationship("User", back_populates="alerts")
+    deliveries = relationship("AlertDelivery", back_populates="alert")
+    acknowledgments = relationship("AlertAcknowledgment", back_populates="alert")
     
     def __repr__(self):
         return f"<Alert(id={self.id}, name='{self.name}', user_id={self.user_id}, active={self.is_active})>" 

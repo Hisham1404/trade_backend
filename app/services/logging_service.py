@@ -6,7 +6,6 @@ Provides JSON logging for production and pretty printing for development.
 import sys
 import logging
 from typing import Any, Dict, Optional
-from pathlib import Path
 
 import structlog
 import orjson

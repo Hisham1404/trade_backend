@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 from prometheus_client import (
     Counter, Histogram, Gauge, Info, Enum,
-    CollectorRegistry, generate_latest, CONTENT_TYPE_LATEST
+    CollectorRegistry, generate_latest
 )
 import psutil
 

@@ -39,6 +39,9 @@ class AlertMessage:
     severity: str
     data: Dict[str, Any]
     timestamp: str
+    acknowledgment_id: Optional[str] = None
+    requires_acknowledgment: bool = True
+    timeout_minutes: int = 15
 
 
 class ConnectionManager:
@@ -196,7 +199,10 @@ class ConnectionManager:
                         'severity': alert.severity,
                         'data': alert.data,
                         'timestamp': alert.timestamp,
-                        'connection_id': conn_info.connection_id
+                        'connection_id': conn_info.connection_id,
+                        'acknowledgment_id': alert.acknowledgment_id,
+                        'requires_acknowledgment': alert.requires_acknowledgment,
+                        'timeout_minutes': alert.timeout_minutes
                     }
                     
                     await conn_info.websocket.send_text(json.dumps(message_data))
@@ -286,6 +292,196 @@ class ConnectionManager:
             for conn in self.active_connections[user_id]
         ]
     
+    async def send_acknowledgment_response(self, user_id: str, acknowledgment_id: str, 
+                                         status: str, message: Optional[str] = None) -> bool:
+        """
+        Send acknowledgment response to user's devices
+        
+        Args:
+            user_id: Target user ID
+            acknowledgment_id: Acknowledgment ID
+            status: Acknowledgment status (acknowledged, dismissed, escalated, timeout)
+            message: Optional response message
+            
+        Returns:
+            True if sent successfully to at least one connection
+        """
+        try:
+            if user_id not in self.active_connections:
+                return False
+            
+            connections = self.active_connections[user_id]
+            sent_count = 0
+            
+            response_data = {
+                'type': 'acknowledgment_response',
+                'acknowledgment_id': acknowledgment_id,
+                'status': status,
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            for conn_info in connections[:]:
+                try:
+                    await conn_info.websocket.send_text(json.dumps(response_data))
+                    conn_info.last_activity = datetime.now()
+                    sent_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to send acknowledgment response to connection {conn_info.connection_id}: {str(e)}")
+                    connections.remove(conn_info)
+            
+            if sent_count > 0:
+                logger.info(f"Acknowledgment response sent to user {user_id}: {acknowledgment_id} ({status})")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error sending acknowledgment response to user {user_id}: {str(e)}")
+            return False
+    
+    async def send_sync_notification(self, user_id: str, sync_token: str, 
+                                   acknowledgment_data: Dict[str, Any]) -> bool:
+        """
+        Send synchronization notification to user's devices
+        
+        Args:
+            user_id: Target user ID
+            sync_token: Synchronization token
+            acknowledgment_data: Acknowledgment data to sync
+            
+        Returns:
+            True if sent successfully to at least one connection
+        """
+        try:
+            if user_id not in self.active_connections:
+                return False
+            
+            connections = self.active_connections[user_id]
+            sent_count = 0
+            
+            sync_data = {
+                'type': 'acknowledgment_sync',
+                'sync_token': sync_token,
+                'acknowledgment_data': acknowledgment_data,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            for conn_info in connections[:]:
+                try:
+                    await conn_info.websocket.send_text(json.dumps(sync_data))
+                    conn_info.last_activity = datetime.now()
+                    sent_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to send sync notification to connection {conn_info.connection_id}: {str(e)}")
+                    connections.remove(conn_info)
+            
+            if sent_count > 0:
+                logger.info(f"Sync notification sent to user {user_id}: {sync_token}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error sending sync notification to user {user_id}: {str(e)}")
+            return False
+    
+    async def handle_acknowledgment_message(self, user_id: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle incoming acknowledgment message from WebSocket
+        
+        Args:
+            user_id: User ID sending the message
+            message_data: Message data containing acknowledgment info
+            
+        Returns:
+            Response data
+        """
+        try:
+            message_type = message_data.get('type')
+            acknowledgment_id = message_data.get('acknowledgment_id')
+            
+            if not acknowledgment_id:
+                return {'error': 'Missing acknowledgment_id'}
+            
+            # Import here to avoid circular imports
+            from app.services.acknowledgment_service import get_acknowledgment_service
+            service = get_acknowledgment_service()
+            
+            if message_type == 'acknowledge':
+                success = await service.acknowledge_alert(
+                    acknowledgment_id=int(acknowledgment_id),
+                    user_id=user_id,
+                    response_message=message_data.get('response_message'),
+                    response_data=message_data.get('response_data'),
+                    device_id=message_data.get('device_id')
+                )
+                
+                if success:
+                    # Notify all user's devices
+                    await self.send_acknowledgment_response(
+                        user_id, acknowledgment_id, 'acknowledged', 
+                        message_data.get('response_message')
+                    )
+                    return {'success': True, 'action': 'acknowledged'}
+                else:
+                    return {'error': 'Failed to acknowledge alert'}
+            
+            elif message_type == 'dismiss':
+                success = await service.dismiss_alert(
+                    acknowledgment_id=int(acknowledgment_id),
+                    user_id=user_id,
+                    reason=message_data.get('reason')
+                )
+                
+                if success:
+                    await self.send_acknowledgment_response(
+                        user_id, acknowledgment_id, 'dismissed',
+                        message_data.get('reason')
+                    )
+                    return {'success': True, 'action': 'dismissed'}
+                else:
+                    return {'error': 'Failed to dismiss alert'}
+            
+            elif message_type == 'escalate':
+                success = await service.escalate_alert(
+                    acknowledgment_id=int(acknowledgment_id),
+                    user_id=user_id,
+                    escalation_reason=message_data.get('escalation_reason')
+                )
+                
+                if success:
+                    await self.send_acknowledgment_response(
+                        user_id, acknowledgment_id, 'escalated',
+                        message_data.get('escalation_reason')
+                    )
+                    return {'success': True, 'action': 'escalated'}
+                else:
+                    return {'error': 'Failed to escalate alert'}
+            
+            elif message_type == 'snooze':
+                success = await service.snooze_alert(
+                    acknowledgment_id=int(acknowledgment_id),
+                    user_id=user_id,
+                    snooze_minutes=message_data.get('snooze_minutes', 30)
+                )
+                
+                if success:
+                    await self.send_acknowledgment_response(
+                        user_id, acknowledgment_id, 'snoozed',
+                        f"Snoozed for {message_data.get('snooze_minutes', 30)} minutes"
+                    )
+                    return {'success': True, 'action': 'snoozed'}
+                else:
+                    return {'error': 'Failed to snooze alert'}
+            
+            else:
+                return {'error': f'Unknown message type: {message_type}'}
+                
+        except Exception as e:
+            logger.error(f"Error handling acknowledgment message: {str(e)}")
+            return {'error': f'Internal error: {str(e)}'}
+    
     async def _send_pending_messages(self, user_id: str) -> None:
         """Send any pending messages to a newly connected user"""
         if user_id not in self.pending_messages:
@@ -343,7 +539,10 @@ async def get_connection_manager() -> ConnectionManager:
 # Utility functions for creating alert messages
 def create_alert_message(alert_id: str, user_id: str, alert_type: str,
                         title: str, message: str, severity: str = "medium",
-                        data: Optional[Dict[str, Any]] = None) -> AlertMessage:
+                        data: Optional[Dict[str, Any]] = None,
+                        acknowledgment_id: Optional[str] = None,
+                        requires_acknowledgment: bool = True,
+                        timeout_minutes: int = 15) -> AlertMessage:
     """
     Create an AlertMessage instance
     
@@ -355,6 +554,9 @@ def create_alert_message(alert_id: str, user_id: str, alert_type: str,
         message: Alert message
         severity: Alert severity (low, medium, high, critical)
         data: Additional alert data
+        acknowledgment_id: Optional acknowledgment ID for tracking
+        requires_acknowledgment: Whether alert requires user acknowledgment
+        timeout_minutes: Minutes before acknowledgment times out
         
     Returns:
         AlertMessage instance
@@ -367,7 +569,10 @@ def create_alert_message(alert_id: str, user_id: str, alert_type: str,
         message=message,
         severity=severity,
         data=data or {},
-        timestamp=datetime.now().isoformat()
+        timestamp=datetime.now().isoformat(),
+        acknowledgment_id=acknowledgment_id,
+        requires_acknowledgment=requires_acknowledgment,
+        timeout_minutes=timeout_minutes
     )
 
 

@@ -8,7 +8,8 @@ import logging
 
 from app.database.connection import create_db_and_tables
 from app.core.config import settings
-from app.routers import auth, users, portfolio, assets, news, alerts, scrapers, monitoring, adk, sentiment, feeds, market_impact, websockets
+from app.routers import auth, users, portfolio, assets, news, alerts, scrapers, monitoring, adk, sentiment, feeds, market_impact, websockets, push_notifications, delivery_tracking, acknowledgments
+from app.routers import celery_monitoring
 from app.services import setup_logging
 from app.services.monitoring_service import monitoring_service
 from app.services.adk_service import get_adk_service, shutdown_adk_service
@@ -57,6 +58,52 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Alerting service initialization failed: {str(e)} - Alert generation will be disabled")
     
+    # Start push notification service
+    try:
+        from app.services.push_notification_service import get_push_notification_service
+        push_service = await get_push_notification_service()
+        logger.info("Push notification service initialized")
+    except ImportError:
+        logger.warning("Push notification service not available")
+    except Exception as e:
+        logger.error(f"Failed to initialize push notification service: {e}")
+    
+    # Initialize delivery tracking service
+    try:
+        from app.services.delivery_tracking_service import get_delivery_tracking_service
+        delivery_service = get_delivery_tracking_service()
+        logger.info("Delivery tracking service initialized")
+    except ImportError:
+        logger.warning("Delivery tracking service not available")
+    except Exception as e:
+        logger.error(f"Failed to initialize delivery tracking service: {e}")
+    
+    # Initialize acknowledgment service and start timeout processing
+    try:
+        from app.services.acknowledgment_service import get_acknowledgment_service
+        acknowledgment_service = get_acknowledgment_service()
+        
+        # Start background task for processing timeouts
+        import asyncio
+        async def process_acknowledgment_timeouts():
+            while True:
+                try:
+                    processed_count = await acknowledgment_service.process_timeouts()
+                    if processed_count > 0:
+                        logger.info(f"Processed {processed_count} acknowledgment timeouts")
+                    await asyncio.sleep(60)  # Check every minute
+                except Exception as e:
+                    logger.error(f"Error processing acknowledgment timeouts: {e}")
+                    await asyncio.sleep(30)  # Shorter retry interval on error
+        
+        # Start the timeout processor in the background
+        asyncio.create_task(process_acknowledgment_timeouts())
+        logger.info("Acknowledgment service initialized with timeout processing")
+    except ImportError:
+        logger.warning("Acknowledgment service not available")
+    except Exception as e:
+        logger.error(f"Failed to initialize acknowledgment service: {e}")
+    
     logger.info("All services started successfully")
     yield
     # Shutdown
@@ -85,6 +132,18 @@ async def lifespan(app: FastAPI):
         logger.info("Alerting service shut down successfully")
     except Exception as e:
         logger.warning(f"Alerting service shutdown warning: {str(e)}")
+    
+    # Close push notification service
+    try:
+        from app.services.push_notification_service import get_push_notification_service
+        push_service = await get_push_notification_service()
+        if push_service:
+            await push_service.close()
+            logger.info("Push notification service closed")
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.error(f"Error closing push notification service: {e}")
     
     logger.info("All services stopped successfully")
 
@@ -148,7 +207,6 @@ async def protected_route(api_key: str = Depends(get_api_key)):
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
-app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["portfolio"])
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["assets"])
 app.include_router(news.router, prefix="/api/v1/news", tags=["news"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
@@ -160,6 +218,10 @@ app.include_router(portfolio.router, prefix="/api/v1/portfolios", tags=["portfol
 app.include_router(market_impact.router, prefix="/api/v1/market-impact", tags=["market-impact"])
 app.include_router(websockets.router)
 app.include_router(monitoring.router)
+app.include_router(push_notifications.router)
+app.include_router(delivery_tracking.router)
+app.include_router(acknowledgments.router)
+app.include_router(celery_monitoring.router)
 
 if __name__ == "__main__":
     import uvicorn

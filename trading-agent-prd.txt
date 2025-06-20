@@ -151,8 +151,8 @@ Source
 
 ### Internal API Endpoints
 ```
-POST /api/v1/portfolio/assets - Add asset to monitor
-DELETE /api/v1/portfolio/assets/{id} - Remove asset
+POST /api/v1/portfolios/assets - Add asset to monitor
+DELETE /api/v1/portfolios/assets/{id} - Remove asset
 GET /api/v1/alerts - Get recent alerts
 GET /api/v1/alerts/live - WebSocket for real-time alerts
 POST /api/v1/sources/discover - Trigger source discovery

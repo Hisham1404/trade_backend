@@ -6,12 +6,9 @@ Integration service for Google Agent Development Kit with trading system
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-import asyncio
 
 from ..core.adk_agent import get_trading_agent, shutdown_trading_agent
 from ..core.adk_config import validate_adk_setup
-from ..models.asset import Asset
-from ..models.alert import Alert
 
 logger = logging.getLogger(__name__)
 

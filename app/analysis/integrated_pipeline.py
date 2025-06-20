@@ -612,3 +612,4 @@ def create_analysis_pipeline(db_session: Optional[Session] = None,
         db_session = next(get_db())
     
     return IntegratedAnalysisPipeline(db_session, alert_config)
+ 

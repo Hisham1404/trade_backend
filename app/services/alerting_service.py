@@ -1,373 +1,366 @@
 """
-Alerting service for sending notifications when thresholds are exceeded.
+Alert Service
+High-level service for managing alerts and integrating with the alert engine
 """
 
 import asyncio
-import time
-from typing import Dict, List, Optional, Any, Callable
-from enum import Enum
-from dataclasses import dataclass, field
+import logging
+from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
-import json
 
-from app.services.logging_service import get_logger
-from app.services.metrics_service import metrics_registry
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import Alert, User, Asset, NewsItem
+from app.services.alert_engine import (
+    get_alert_engine, 
+    AlertEngine, 
+    AlertEvent, 
+    AlertType, 
+    AlertPriority,
+    AlertRule,
+    AlertCondition,
+    ConditionOperator
+)
 
-logger = get_logger(__name__)
-
-
-class AlertSeverity(Enum):
-    """Alert severity levels."""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
-class AlertStatus(Enum):
-    """Alert status."""
-    ACTIVE = "active"
-    RESOLVED = "resolved"
-    ACKNOWLEDGED = "acknowledged"
-
-
-@dataclass
-class Alert:
-    """Alert information."""
-    id: str
-    title: str
-    description: str
-    severity: AlertSeverity
-    status: AlertStatus
-    component: str
-    metric_name: Optional[str] = None
-    threshold_value: Optional[float] = None
-    current_value: Optional[float] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
-    resolved_at: Optional[datetime] = None
-    details: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class AlertRule:
-    """Alert rule configuration."""
-    name: str
-    metric_name: str
-    threshold: float
-    operator: str  # >, <, >=, <=, ==
-    severity: AlertSeverity
-    component: str
-    description: str
-    enabled: bool = True
-    cooldown_seconds: int = 300  # 5 minutes
-    last_triggered: Optional[datetime] = None
+logger = logging.getLogger(__name__)
 
 
 class AlertingService:
-    """Service for managing alerts and notifications."""
+    """
+    High-level alerting service that coordinates between different data sources
+    and the alert engine to generate and manage alerts.
+    """
     
     def __init__(self):
-        self.active_alerts: Dict[str, Alert] = {}
-        self.alert_rules: Dict[str, AlertRule] = {}
-        self.notification_channels: List[Callable] = []
-        self._setup_default_rules()
+        self.alert_engine: Optional[AlertEngine] = None
+        self._initialized = False
     
-    def _setup_default_rules(self) -> None:
-        """Set up default alert rules."""
-        default_rules = [
-            AlertRule(
-                name="high_memory_usage",
-                metric_name="memory_usage_percent",
-                threshold=85.0,
-                operator=">=",
-                severity=AlertSeverity.HIGH,
-                component="system",
-                description="Memory usage is above 85%"
-            ),
-            AlertRule(
-                name="high_cpu_usage",
-                metric_name="cpu_usage_percent",
-                threshold=80.0,
-                operator=">=",
-                severity=AlertSeverity.HIGH,
-                component="system",
-                description="CPU usage is above 80%"
-            ),
-            AlertRule(
-                name="high_disk_usage",
-                metric_name="disk_usage_percent",
-                threshold=90.0,
-                operator=">=",
-                severity=AlertSeverity.CRITICAL,
-                component="system",
-                description="Disk usage is above 90%"
-            ),
-            AlertRule(
-                name="scraper_errors",
-                metric_name="scraper_errors_total",
-                threshold=10.0,
-                operator=">=",
-                severity=AlertSeverity.MEDIUM,
-                component="scrapers",
-                description="High number of scraper errors"
-            ),
-            AlertRule(
-                name="database_slow_response",
-                metric_name="database_response_time_ms",
-                threshold=1000.0,
-                operator=">=",
-                severity=AlertSeverity.MEDIUM,
-                component="database",
-                description="Database response time is slow"
-            ),
-        ]
+    async def initialize(self):
+        """Initialize the alerting service"""
+        if not self._initialized:
+            self.alert_engine = await get_alert_engine()
+            self._initialized = True
+            logger.info("Alerting service initialized")
+    
+    async def process_market_impact_alert(
+        self, 
+        asset_symbol: str, 
+        impact_score: float, 
+        confidence: float, 
+        reason: str, 
+        user_id: Optional[int] = None
+    ) -> List[AlertEvent]:
+        """Process market impact data and generate alerts"""
+        await self.initialize()
         
-        for rule in default_rules:
-            self.alert_rules[rule.name] = rule
-    
-    def add_notification_channel(self, channel: Callable[[Alert], None]) -> None:
-        """Add a notification channel (function that receives alerts)."""
-        self.notification_channels.append(channel)
-    
-    def add_alert_rule(self, rule: AlertRule) -> None:
-        """Add or update an alert rule."""
-        self.alert_rules[rule.name] = rule
-        logger.info("Alert rule added/updated", rule_name=rule.name)
-    
-    def remove_alert_rule(self, rule_name: str) -> None:
-        """Remove an alert rule."""
-        if rule_name in self.alert_rules:
-            del self.alert_rules[rule_name]
-            logger.info("Alert rule removed", rule_name=rule_name)
-    
-    async def check_alerts(self) -> List[Alert]:
-        """Check all alert rules and trigger alerts if needed."""
-        triggered_alerts = []
+        impact_data = {
+            'asset_symbol': asset_symbol,
+            'impact_score': impact_score,
+            'confidence': confidence,
+            'reason': reason,
+            'user_id': user_id,
+            'timestamp': datetime.utcnow().isoformat()
+        }
         
-        for rule_name, rule in self.alert_rules.items():
-            if not rule.enabled:
-                continue
-            
-            # Check cooldown
-            if (rule.last_triggered and 
-                datetime.utcnow() - rule.last_triggered < 
-                timedelta(seconds=rule.cooldown_seconds)):
-                continue
-            
-            try:
-                alert = await self._evaluate_rule(rule)
-                if alert:
-                    triggered_alerts.append(alert)
-                    rule.last_triggered = datetime.utcnow()
-                    
-            except Exception as e:
-                logger.error("Failed to evaluate alert rule", 
-                           rule_name=rule_name, error=str(e))
+        triggered_alerts = await self.alert_engine.process_market_impact_data(impact_data)
+        
+        # Send triggered alerts
+        for alert in triggered_alerts:
+            await self.alert_engine.send_alert(alert)
         
         return triggered_alerts
     
-    async def _evaluate_rule(self, rule: AlertRule) -> Optional[Alert]:
-        """Evaluate a single alert rule."""
-        # Get current metric value
-        current_value = await self._get_metric_value(rule.metric_name, rule.component)
+    async def process_sentiment_alert(
+        self, 
+        asset_symbol: str, 
+        sentiment_score: float, 
+        sentiment_label: str, 
+        news_title: str,
+        user_id: Optional[int] = None
+    ) -> List[AlertEvent]:
+        """Process sentiment analysis data and generate alerts"""
+        await self.initialize()
         
-        if current_value is None:
-            return None
+        sentiment_data = {
+            'asset_symbol': asset_symbol,
+            'sentiment_score': sentiment_score,
+            'sentiment_label': sentiment_label,
+            'news_title': news_title,
+            'user_id': user_id,
+            'timestamp': datetime.utcnow().isoformat()
+        }
         
-        # Evaluate condition
-        condition_met = self._evaluate_condition(
-            current_value, rule.operator, rule.threshold
-        )
+        triggered_alerts = await self.alert_engine.process_sentiment_data(sentiment_data)
         
-        if condition_met:
-            alert_id = f"{rule.component}_{rule.name}_{int(time.time())}"
+        # Send triggered alerts
+        for alert in triggered_alerts:
+            await self.alert_engine.send_alert(alert)
+        
+        return triggered_alerts
+    
+    async def process_price_movement_alert(
+        self, 
+        asset_symbol: str, 
+        current_price: float, 
+        price_change_percent: float,
+        user_id: Optional[int] = None
+    ) -> List[AlertEvent]:
+        """Process price movement data and generate alerts"""
+        await self.initialize()
+        
+        price_data = {
+            'asset_symbol': asset_symbol,
+            'current_price': current_price,
+            'price_change_percent': price_change_percent,
+            'user_id': user_id,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        triggered_alerts = await self.alert_engine.process_price_data(price_data)
+        
+        # Send triggered alerts
+        for alert in triggered_alerts:
+            await self.alert_engine.send_alert(alert)
+        
+        return triggered_alerts
+    
+    async def create_custom_alert_rule(
+        self,
+        rule_id: str,
+        name: str,
+        description: str,
+        alert_type: str,
+        conditions: List[Dict[str, Any]],
+        priority: str,
+        template: str,
+        cooldown_minutes: int = 30,
+        rate_limit_per_hour: int = 10
+    ) -> bool:
+        """Create a custom alert rule"""
+        await self.initialize()
+        
+        try:
+            # Convert string values to enums
+            alert_type_enum = AlertType(alert_type)
+            priority_enum = AlertPriority(priority)
             
-            # Check if similar alert already exists
-            existing_alert = self._find_existing_alert(rule.component, rule.metric_name)
-            if existing_alert:
-                # Update existing alert
-                existing_alert.current_value = current_value
-                existing_alert.updated_at = datetime.utcnow()
-                return None  # Don't create duplicate
+            # Convert conditions
+            alert_conditions = []
+            for cond in conditions:
+                operator = ConditionOperator(cond['operator'])
+                condition = AlertCondition(
+                    field=cond['field'],
+                    operator=operator,
+                    value=cond['value'],
+                    weight=cond.get('weight', 1.0)
+                )
+                alert_conditions.append(condition)
             
-            # Create new alert
-            alert = Alert(
-                id=alert_id,
-                title=f"{rule.component.title()} Alert: {rule.name}",
-                description=rule.description,
-                severity=rule.severity,
-                status=AlertStatus.ACTIVE,
-                component=rule.component,
-                metric_name=rule.metric_name,
-                threshold_value=rule.threshold,
-                current_value=current_value,
-                details={
-                    "rule_name": rule.name,
-                    "operator": rule.operator,
-                }
+            # Create rule
+            rule = AlertRule(
+                rule_id=rule_id,
+                name=name,
+                description=description,
+                alert_type=alert_type_enum,
+                conditions=alert_conditions,
+                priority_base=priority_enum,
+                template=template,
+                cooldown_minutes=cooldown_minutes,
+                rate_limit_per_hour=rate_limit_per_hour
             )
             
-            # Store alert
-            self.active_alerts[alert_id] = alert
-            
-            # Send notifications
-            await self._send_notifications(alert)
-            
-            # Update metrics
-            metrics_registry.get_metric('alerts_triggered_total').labels(
-                alert_type=rule.name, severity=rule.severity.value
-            ).inc()
-            
-            logger.warning("Alert triggered", 
-                         alert_id=alert_id, 
-                         component=rule.component,
-                         metric=rule.metric_name,
-                         current_value=current_value,
-                         threshold=rule.threshold)
-            
-            return alert
-        
-        return None
-    
-    async def _get_metric_value(self, metric_name: str, component: str) -> Optional[float]:
-        """Get current value of a metric."""
-        try:
-            # This is a simplified implementation
-            # In a real system, you'd query your metrics store
-            
-            if metric_name == "memory_usage_percent":
-                import psutil
-                return psutil.virtual_memory().percent
-            elif metric_name == "cpu_usage_percent":
-                import psutil
-                return psutil.cpu_percent(interval=1)
-            elif metric_name == "disk_usage_percent":
-                import psutil
-                disk = psutil.disk_usage('/')
-                return (disk.used / disk.total) * 100
-            elif metric_name == "scraper_errors_total":
-                # This would need to query the actual metric
-                return 0.0  # Placeholder
-            elif metric_name == "database_response_time_ms":
-                # This would need to query the actual metric
-                return 0.0  # Placeholder
-            
-            return None
+            self.alert_engine.add_rule(rule)
+            logger.info(f"Created custom alert rule: {name}")
+            return True
             
         except Exception as e:
-            logger.error("Failed to get metric value", 
-                       metric_name=metric_name, error=str(e))
-            return None
-    
-    def _evaluate_condition(self, value: float, operator: str, threshold: float) -> bool:
-        """Evaluate alert condition."""
-        if operator == ">":
-            return value > threshold
-        elif operator == ">=":
-            return value >= threshold
-        elif operator == "<":
-            return value < threshold
-        elif operator == "<=":
-            return value <= threshold
-        elif operator == "==":
-            return value == threshold
-        else:
-            logger.error("Unknown operator", operator=operator)
+            logger.error(f"Failed to create custom alert rule: {e}")
             return False
     
-    def _find_existing_alert(self, component: str, metric_name: str) -> Optional[Alert]:
-        """Find existing active alert for the same component and metric."""
-        for alert in self.active_alerts.values():
-            if (alert.component == component and 
-                alert.metric_name == metric_name and 
-                alert.status == AlertStatus.ACTIVE):
-                return alert
-        return None
-    
-    async def _send_notifications(self, alert: Alert) -> None:
-        """Send alert notifications through all configured channels."""
-        for channel in self.notification_channels:
-            try:
-                if asyncio.iscoroutinefunction(channel):
-                    await channel(alert)
-                else:
-                    channel(alert)
-            except Exception as e:
-                logger.error("Failed to send notification", 
-                           alert_id=alert.id, error=str(e))
-    
-    async def resolve_alert(self, alert_id: str) -> bool:
-        """Resolve an active alert."""
-        if alert_id in self.active_alerts:
-            alert = self.active_alerts[alert_id]
-            alert.status = AlertStatus.RESOLVED
-            alert.resolved_at = datetime.utcnow()
-            alert.updated_at = datetime.utcnow()
-            
-            logger.info("Alert resolved", alert_id=alert_id)
-            return True
+    async def get_alert_rules(self) -> List[Dict[str, Any]]:
+        """Get all alert rules"""
+        await self.initialize()
         
+        rules = self.alert_engine.get_rules()
+        return [
+            {
+                'rule_id': rule.rule_id,
+                'name': rule.name,
+                'description': rule.description,
+                'alert_type': rule.alert_type.value,
+                'priority_base': rule.priority_base.value,
+                'is_active': rule.is_active,
+                'cooldown_minutes': rule.cooldown_minutes,
+                'rate_limit_per_hour': rule.rate_limit_per_hour,
+                'conditions': [
+                    {
+                        'field': cond.field,
+                        'operator': cond.operator.value,
+                        'value': cond.value,
+                        'weight': cond.weight
+                    }
+                    for cond in rule.conditions
+                ],
+                'template': rule.template
+            }
+            for rule in rules
+        ]
+    
+    async def update_alert_rule_status(self, rule_id: str, is_active: bool) -> bool:
+        """Update alert rule active status"""
+        await self.initialize()
+        
+        rules = self.alert_engine.get_rules()
+        for rule in rules:
+            if rule.rule_id == rule_id:
+                rule.is_active = is_active
+                logger.info(f"Updated alert rule {rule_id} status to: {is_active}")
+                return True
+        
+        logger.warning(f"Alert rule not found: {rule_id}")
         return False
     
-    async def acknowledge_alert(self, alert_id: str) -> bool:
-        """Acknowledge an active alert."""
-        if alert_id in self.active_alerts:
-            alert = self.active_alerts[alert_id]
-            alert.status = AlertStatus.ACKNOWLEDGED
-            alert.updated_at = datetime.utcnow()
-            
-            logger.info("Alert acknowledged", alert_id=alert_id)
-            return True
+    async def remove_alert_rule(self, rule_id: str) -> bool:
+        """Remove an alert rule"""
+        await self.initialize()
         
-        return False
+        success = self.alert_engine.remove_rule(rule_id)
+        if success:
+            logger.info(f"Removed alert rule: {rule_id}")
+        else:
+            logger.warning(f"Failed to remove alert rule: {rule_id}")
+        
+        return success
     
-    def get_active_alerts(self) -> List[Alert]:
-        """Get all active alerts."""
-        return [alert for alert in self.active_alerts.values() 
-                if alert.status == AlertStatus.ACTIVE]
+    async def send_test_alert(
+        self, 
+        user_id: int, 
+        alert_type: str = "system_notification",
+        title: str = "Test Alert",
+        message: str = "This is a test alert from the system"
+    ) -> bool:
+        """Send a test alert to a specific user"""
+        await self.initialize()
+        
+        try:
+            alert_event = AlertEvent(
+                rule_id="test_alert",
+                alert_type=AlertType(alert_type),
+                priority=AlertPriority.LOW,
+                title=title,
+                message=message,
+                data={'test': True},
+                user_id=user_id
+            )
+            
+            success = await self.alert_engine.send_alert(alert_event)
+            logger.info(f"Test alert sent to user {user_id}: {success}")
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to send test alert: {e}")
+            return False
     
-    def get_alert(self, alert_id: str) -> Optional[Alert]:
-        """Get a specific alert by ID."""
-        return self.active_alerts.get(alert_id)
+    async def get_alert_stats(self) -> Dict[str, Any]:
+        """Get alerting service statistics"""
+        await self.initialize()
+        
+        engine_stats = self.alert_engine.get_stats()
+        
+        return {
+            'service_initialized': self._initialized,
+            'engine_stats': engine_stats,
+            'timestamp': datetime.utcnow().isoformat()
+        }
     
-    def get_alert_history(self, limit: int = 100) -> List[Alert]:
-        """Get alert history (most recent first)."""
-        alerts = list(self.active_alerts.values())
-        alerts.sort(key=lambda x: x.created_at, reverse=True)
-        return alerts[:limit]
-
-
-# Default notification channels
-async def log_notification_channel(alert: Alert) -> None:
-    """Log alert as a notification."""
-    logger.warning(
-        "ALERT NOTIFICATION",
-        alert_id=alert.id,
-        title=alert.title,
-        description=alert.description,
-        severity=alert.severity.value,
-        component=alert.component,
-        current_value=alert.current_value,
-        threshold_value=alert.threshold_value
-    )
-
-
-def console_notification_channel(alert: Alert) -> None:
-    """Print alert to console (for development)."""
-    print(f"\n🚨 ALERT: {alert.title}")
-    print(f"   Severity: {alert.severity.value.upper()}")
-    print(f"   Component: {alert.component}")
-    print(f"   Description: {alert.description}")
-    if alert.current_value and alert.threshold_value:
-        print(f"   Current: {alert.current_value}, Threshold: {alert.threshold_value}")
-    print(f"   Time: {alert.created_at}")
-    print()
+    async def process_news_impact_analysis(
+        self,
+        news_title: str,
+        news_content: str,
+        asset_symbol: str,
+        impact_score: float,
+        sentiment_score: float,
+        sentiment_label: str,
+        confidence: float,
+        user_id: Optional[int] = None
+    ) -> List[AlertEvent]:
+        """Process comprehensive news impact analysis and generate appropriate alerts"""
+        await self.initialize()
+        
+        all_alerts = []
+        
+        # Process market impact alert if significant
+        if impact_score >= 6.0 and confidence >= 0.6:
+            impact_alerts = await self.process_market_impact_alert(
+                asset_symbol=asset_symbol,
+                impact_score=impact_score,
+                confidence=confidence,
+                reason=f"News impact analysis: {news_title[:100]}...",
+                user_id=user_id
+            )
+            all_alerts.extend(impact_alerts)
+        
+        # Process sentiment alert if extreme
+        if abs(sentiment_score) >= 0.7:
+            sentiment_alerts = await self.process_sentiment_alert(
+                asset_symbol=asset_symbol,
+                sentiment_score=sentiment_score,
+                sentiment_label=sentiment_label,
+                news_title=news_title,
+                user_id=user_id
+            )
+            all_alerts.extend(sentiment_alerts)
+        
+        return all_alerts
+    
+    async def monitor_portfolio_alerts(
+        self,
+        user_id: int,
+        portfolio_assets: List[str],
+        price_threshold: float = 5.0,
+        sentiment_threshold: float = 0.8
+    ) -> List[AlertEvent]:
+        """Monitor a portfolio for alert conditions"""
+        await self.initialize()
+        
+        all_alerts = []
+        
+        # This would integrate with real market data
+        # For now, simulate some portfolio monitoring
+        for asset_symbol in portfolio_assets:
+            # Simulate checking various conditions
+            # In practice, this would query real market data APIs
+            
+            # Example: Check for simulated price movements
+            simulated_price_change = 0  # Would be real data
+            if abs(simulated_price_change) >= price_threshold:
+                price_alerts = await self.process_price_movement_alert(
+                    asset_symbol=asset_symbol,
+                    current_price=100.0,  # Would be real price
+                    price_change_percent=simulated_price_change,
+                    user_id=user_id
+                )
+                all_alerts.extend(price_alerts)
+        
+        return all_alerts
 
 
 # Global alerting service instance
-alerting_service = AlertingService()
+alerting_service: Optional[AlertingService] = None
 
-# Add default notification channels
-alerting_service.add_notification_channel(log_notification_channel)
-alerting_service.add_notification_channel(console_notification_channel) 
+
+async def get_alerting_service() -> AlertingService:
+    """Get or create the global alerting service instance"""
+    global alerting_service
+    if alerting_service is None:
+alerting_service = AlertingService()
+        await alerting_service.initialize()
+    return alerting_service
+
+
+async def shutdown_alerting_service() -> None:
+    """Shutdown the alerting service"""
+    global alerting_service
+    if alerting_service:
+        logger.info("Alerting service shutdown complete")
+        alerting_service = None 

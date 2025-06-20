@@ -335,6 +335,11 @@ class ConnectionManager:
 connection_manager = ConnectionManager()
 
 
+async def get_connection_manager() -> ConnectionManager:
+    """Get the global connection manager instance"""
+    return connection_manager
+
+
 # Utility functions for creating alert messages
 def create_alert_message(alert_id: str, user_id: str, alert_type: str,
                         title: str, message: str, severity: str = "medium",

@@ -1,0 +1,66 @@
+# FastAPI Core
+fastapi==0.115.12
+uvicorn[standard]==0.29.0
+
+# Database
+sqlalchemy==2.0.34
+psycopg2-binary==2.9.9
+alembic==1.13.2
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
+
+# HTTP Client for external APIs
+httpx==0.27.2
+aiohttp==3.10.6
+
+# Data processing
+pandas==2.1.4
+numpy==1.24.4
+
+# Web scraping and data collection
+beautifulsoup4==4.12.3
+aiofiles==24.1.0
+feedparser==6.0.11
+lxml==5.3.0
+
+# Date/Time handling
+python-dateutil==2.8.2
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Background tasks
+celery==5.3.4
+redis==5.0.1
+
+# Logging
+loguru==0.7.2
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Documentation
+pydantic[email]==2.5.0
+
+# CORS
+fastapi-cors==0.0.6
+
+# Monitoring
+prometheus-client==0.19.0
+
+# Email notifications (if needed)
+fastapi-mail==1.4.1
+
+# Websocket support
+websockets==12.0
+
+# Monitoring and Logging
+structlog==24.1.0
+prometheus_client==0.20.0
+orjson==3.9.15
+psutil==5.9.8
+rich==13.7.1 

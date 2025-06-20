@@ -58,6 +58,11 @@ class ScraperManager:
         self.background_task: Optional[asyncio.Task] = None
         self._background_running = False
         self.executor = ThreadPoolExecutor(max_workers=max_concurrent)
+    
+    @property
+    def is_background_running(self) -> bool:
+        """Check if background scraping is currently running."""
+        return self._background_running
         
     @contextmanager
     def get_db_session(self):

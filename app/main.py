@@ -13,6 +13,7 @@ from app.services import setup_logging
 from app.services.monitoring_service import monitoring_service
 from app.services.adk_service import get_adk_service, shutdown_adk_service
 from app.services.sentiment_service import get_sentiment_service, shutdown_sentiment_service
+from app.services.alerting_service import get_alerting_service, shutdown_alerting_service
 
 # Load environment variables
 load_dotenv()
@@ -48,6 +49,14 @@ async def lifespan(app: FastAPI):
         logger.info("Sentiment analysis service initialized successfully")
     except Exception as e:
         logger.warning(f"Sentiment service initialization failed: {str(e)} - Sentiment analysis will be disabled")
+    
+    # Initialize alerting service
+    try:
+        alerting_service = await get_alerting_service()
+        logger.info("Alerting service initialized successfully")
+    except Exception as e:
+        logger.warning(f"Alerting service initialization failed: {str(e)} - Alert generation will be disabled")
+    
     logger.info("All services started successfully")
     yield
     # Shutdown
@@ -69,6 +78,14 @@ async def lifespan(app: FastAPI):
         logger.info("Sentiment service shut down successfully")
     except Exception as e:
         logger.warning(f"Sentiment service shutdown warning: {str(e)}")
+    
+    # Shutdown alerting service
+    try:
+        await shutdown_alerting_service()
+        logger.info("Alerting service shut down successfully")
+    except Exception as e:
+        logger.warning(f"Alerting service shutdown warning: {str(e)}")
+    
     logger.info("All services stopped successfully")
 
 # Create FastAPI app

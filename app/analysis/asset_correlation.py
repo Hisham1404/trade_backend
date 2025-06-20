@@ -871,3 +871,4 @@ def extract_asset_symbols_from_text(text: str) -> List[str]:
             symbols.append(entity.normalized_value)
     
     return list(set(symbols))  # Remove duplicates
+ 

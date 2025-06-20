@@ -800,3 +800,4 @@ async def calculate_portfolio_impact(scorer: MarketImpactScorer,
             "NEUTRAL"
         )
     }
+ 

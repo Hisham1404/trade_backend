@@ -2,14 +2,12 @@
 Health monitoring service for checking application component health.
 """
 
-import asyncio
 import time
 from typing import Dict, List, Optional, Any
 from enum import Enum
-from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 
-import aiohttp
 import psutil
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -297,7 +295,7 @@ class HealthChecker:
             from app.scrapers.manager import scraper_manager
             
             # Check if scrapers are running
-            is_running = scraper_manager.is_background_running()
+            is_running = scraper_manager.is_background_running
             
             # Get scraper status
             if is_running:

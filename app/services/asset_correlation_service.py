@@ -7,18 +7,14 @@ correlations between news events and assets.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 
 from app.analysis.asset_correlation import (
-    CorrelationAnalyzer,
     create_correlation_analyzer,
     quick_asset_correlation,
-    extract_asset_symbols_from_text,
-    NewsContext,
-    EntityType,
-    CorrelationType
+    extract_asset_symbols_from_text
 )
 from app.database.connection import get_db
 

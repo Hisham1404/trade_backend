@@ -3,20 +3,15 @@ Alert Generation Logic Engine
 Configurable alert rules with priority classification, templating, deduplication, and rate limiting
 """
 
-import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable, Union
+from typing import Dict, List, Optional, Any
 from enum import Enum
 from dataclasses import dataclass, field
 from collections import defaultdict
 import hashlib
 import json
-from pathlib import Path
 
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import Alert, User, Asset, NewsItem
 from app.websockets.manager import ConnectionManager
 
 logger = logging.getLogger(__name__)

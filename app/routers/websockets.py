@@ -187,12 +187,54 @@ async def handle_client_message(websocket: WebSocket, user_id: str,
             }
             await websocket.send_text(json.dumps(heartbeat_response))
             
+        elif message_type in ['acknowledge', 'dismiss', 'escalate', 'snooze']:
+            # Handle acknowledgment-related messages
+            response = await connection_manager.handle_acknowledgment_message(user_id, message)
+            
+            # Send response back to client
+            acknowledgment_response = {
+                'type': 'acknowledgment_result',
+                'action': message_type,
+                'result': response,
+                'timestamp': datetime.now().isoformat(),
+                'connection_id': connection_id
+            }
+            await websocket.send_text(json.dumps(acknowledgment_response))
+            
+        elif message_type == 'sync_request':
+            # Handle synchronization request
+            sync_token = message.get('sync_token')
+            device_id = message.get('device_id', connection_id)
+            
+            if sync_token:
+                # Import here to avoid circular imports
+                from app.services.acknowledgment_service import get_acknowledgment_service
+                service = get_acknowledgment_service()
+                
+                success = await service.sync_acknowledgment_across_devices(sync_token, device_id)
+                
+                sync_response = {
+                    'type': 'sync_result',
+                    'sync_token': sync_token,
+                    'success': success,
+                    'timestamp': datetime.now().isoformat()
+                }
+                await websocket.send_text(json.dumps(sync_response))
+            else:
+                error_response = {
+                    'type': 'sync_error',
+                    'message': 'Missing sync_token',
+                    'timestamp': datetime.now().isoformat()
+                }
+                await websocket.send_text(json.dumps(error_response))
+            
         else:
             # Unknown message type
             unknown_response = {
                 'type': 'unknown_message_type',
                 'received_type': message_type,
                 'message': f'Unknown message type: {message_type}',
+                'supported_types': ['ping', 'subscribe', 'get_stats', 'heartbeat', 'acknowledge', 'dismiss', 'escalate', 'snooze', 'sync_request'],
                 'timestamp': datetime.now().isoformat()
             }
             await websocket.send_text(json.dumps(unknown_response))

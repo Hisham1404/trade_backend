@@ -6,20 +6,16 @@ Provides sentiment tracking, analysis aggregation, and integration with scrapers
 
 import logging
 import asyncio
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+from datetime import datetime
 from collections import defaultdict, deque
-import json
 
 from ..analysis.sentiment_engine import (
     get_sentiment_engine, 
     SentimentEngine, 
     SentimentResult, 
-    BatchSentimentResult,
-    SentimentLabel
+    BatchSentimentResult
 )
-from ..models.asset import Asset
-from ..models.alert import Alert
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +273,7 @@ class SentimentService:
             asset_symbols = [item.get('asset_symbol') for item in batch]
             
             # Analyze batch
-            result = await self.analyze_batch(
+            await self.analyze_batch(
                 texts, 
                 asset_symbols, 
                 source="background_queue"
@@ -336,7 +332,7 @@ class SentimentService:
         """Create a sentiment-based alert"""
         try:
             # This would integrate with your existing alert system
-            alert_data = {
+            _alert_placeholder = {
                 'type': 'sentiment',
                 'asset_symbol': asset_symbol,
                 'title': title,

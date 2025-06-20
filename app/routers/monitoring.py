@@ -8,7 +8,8 @@ from prometheus_client import CONTENT_TYPE_LATEST
 
 from app.services.health_service import health_checker
 from app.services.metrics_service import metrics_registry
-from app.services.alerting_service import alerting_service, Alert, AlertRule, AlertSeverity
+from app.services.alert_engine import AlertPriority
+from app.services.alerting_service import alerting_service
 from app.services.monitoring_service import monitoring_service
 from app.services.logging_service import get_logger
 from app.auth import get_current_user
@@ -321,8 +322,8 @@ async def monitoring_dashboard(
             "components": health_checker.to_dict(health)["components"],
             "alerts": {
                 "active_count": len(active_alerts),
-                "critical_count": len([a for a in active_alerts if a.severity == AlertSeverity.CRITICAL]),
-                "high_count": len([a for a in active_alerts if a.severity == AlertSeverity.HIGH]),
+                "critical_count": len([a for a in active_alerts if a.severity == AlertPriority.CRITICAL]),
+                "high_count": len([a for a in active_alerts if a.severity == AlertPriority.HIGH]),
                 "recent": [
                     {
                         "id": alert.id,

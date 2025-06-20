@@ -1,4 +1,4 @@
-# Trading Intelligence Agent 🤖📈
+# Trading Intelligence Agent 🤖📈 (In progress)
 
 An AI-powered financial intelligence system that provides real-time market analysis, sentiment tracking, and automated trading insights for the Indian stock market.
 

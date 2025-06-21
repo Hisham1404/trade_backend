@@ -22,7 +22,9 @@ celery_app = Celery(
         'app.tasks.analysis',
         'app.tasks.market_data',
         'app.tasks.alerts',
-        'app.tasks.monitoring'
+        'app.tasks.monitoring',
+        'app.tasks.participant_data',
+        'app.tasks.insights_tasks'
     ]
 )
 
@@ -108,6 +110,18 @@ celery_app.conf.task_routes = {
     'app.tasks.market_data.update_participant_flow': {'queue': 'market_data'},
     'app.tasks.market_data.fetch_real_time_prices': {'queue': 'high_priority'},
     'app.tasks.market_data.update_volatility_data': {'queue': 'market_data'},
+    
+    # Participant data tasks - time sensitive market data
+    'app.tasks.participant_data.ingest_current_participant_data_task': {'queue': 'market_data'},
+    'app.tasks.participant_data.ingest_historical_participant_data_task': {'queue': 'market_data'},
+    'app.tasks.participant_data.generate_daily_participant_summary_task': {'queue': 'analysis'},
+    'app.tasks.participant_data.schedule_weekly_historical_backfill': {'queue': 'maintenance'},
+    'app.tasks.participant_data.cleanup_old_ingestion_logs': {'queue': 'maintenance'},
+    
+    # Insights tasks - analysis and reporting
+    'app.tasks.insights_tasks.generate_daily_insights_task': {'queue': 'analysis'},
+    'app.tasks.insights_tasks.update_dashboard_data_task': {'queue': 'analysis'},
+    'app.tasks.insights_tasks.detect_behavioral_shifts_task': {'queue': 'analysis'},
     
     # Alert tasks - immediate priority
     'app.tasks.alerts.process_alert_queue': {'queue': 'alerts'},
@@ -196,6 +210,55 @@ celery_app.conf.beat_schedule = {
             minute=settings.CELERY_BEAT_SCHEDULE_PARTICIPANT_FLOW_MINUTE
         ),
         'options': {'queue': 'market_data'},
+    },
+    
+    # NSE Participant data ingestion every 5 minutes during market hours
+    'ingest-participant-data': {
+        'task': 'app.tasks.participant_data.ingest_current_participant_data_task',
+        'schedule': 300.0,  # Every 5 minutes
+        'options': {'queue': 'market_data', 'expires': 240},
+    },
+    
+    # Generate participant summary daily at 6:30 PM
+    'generate-participant-summary': {
+        'task': 'app.tasks.participant_data.generate_daily_participant_summary_task',
+        'schedule': crontab(hour=18, minute=30),
+        'options': {'queue': 'analysis'},
+    },
+    
+    # Weekly historical data backfill on Monday at 2 AM
+    'participant-data-backfill': {
+        'task': 'app.tasks.participant_data.schedule_weekly_historical_backfill',
+        'schedule': crontab(hour=2, minute=0, day_of_week=1),
+        'options': {'queue': 'maintenance'},
+    },
+    
+    # Monthly cleanup on first day at 3 AM
+    'participant-data-cleanup': {
+        'task': 'app.tasks.participant_data.cleanup_old_ingestion_logs',
+        'schedule': crontab(hour=3, minute=0, day_of_month=1),
+        'options': {'queue': 'maintenance'},
+    },
+    
+    # Generate daily insights at 7 PM
+    'generate-daily-insights': {
+        'task': 'app.tasks.insights_tasks.generate_daily_insights_task',
+        'schedule': crontab(hour=19, minute=0),
+        'options': {'queue': 'analysis'},
+    },
+    
+    # Update dashboard data every 30 minutes during market hours
+    'update-dashboard-data': {
+        'task': 'app.tasks.insights_tasks.update_dashboard_data_task',
+        'schedule': 1800.0,  # 30 minutes
+        'options': {'queue': 'analysis', 'expires': 1500},
+    },
+    
+    # Detect behavioral shifts daily at 6 PM
+    'detect-behavioral-shifts': {
+        'task': 'app.tasks.insights_tasks.detect_behavioral_shifts_task',
+        'schedule': crontab(hour=18, minute=0),
+        'options': {'queue': 'analysis'},
     },
     
     # Process unanalyzed news every 10 minutes

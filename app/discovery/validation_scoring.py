@@ -164,7 +164,7 @@ class QualityScoring:
 
     def _analyze_information_quality(self, content: str) -> float:
         score = 0.0
-        data_patterns = [r'\d+%', r'\d+\.\d+', r'\$\d+', r'â‚¹\d+']
+        data_patterns = [r'\d+%', r'\d+\.\d+', r'\$\d+', r'₹\d+']
         score += min(sum(len(re.findall(p, content)) for p in data_patterns) * 0.05, 0.3)
         cite_patterns = [r'according to', r'source:', r'reported by', r'study by']
         score += min(sum(1 for p in cite_patterns if re.search(p, content, re.I)) * 0.1, 0.3)
@@ -186,10 +186,10 @@ class BiasDetection:
         if not content: return 0.5
         bias_score = 1.0
         content_lower = content.lower()
-        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['emotional']) * 0.05, 0.3)
-        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['absolute']) * 0.03, 0.2)
-        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['loaded']) * 0.04, 0.2)
-        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['partisan']) * 0.1, 0.3)
+        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['emotional'] if t in content_lower) * 0.05, 0.3)
+        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['absolute'] if t in content_lower) * 0.03, 0.2)
+        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['loaded'] if t in content_lower) * 0.04, 0.2)
+        bias_score -= min(sum(1 for t in self.BIAS_INDICATORS['partisan'] if t in content_lower) * 0.1, 0.3)
         balance_indicators = ['however', 'on the other hand', 'alternatively', 'but', 'although']
         bias_score += min(sum(1 for t in balance_indicators if t in content_lower) * 0.05, 0.2)
         return max(0.0, min(bias_score, 1.0))
@@ -214,7 +214,7 @@ class FactCheckingIntegration:
 
     def _verify_single_claim(self, claim: str, source_url: Optional[str] = None) -> float:
         score = 0.5
-        if re.search(r'\d+%|\d+\.\d+|â‚¹\d+|\$\d+', claim): score += 0.2
+        if re.search(r'\d+%|\d+\.\d+|₹\d+|\$\d+', claim): score += 0.2
         if any(t in claim.lower() for t in ['according to', 'source:', 'reported by']): score += 0.2
         if source_url and any(d in source_url for d in ['nseindia.com', 'rbi.org.in', 'sebi.gov.in']):
             score += 0.3

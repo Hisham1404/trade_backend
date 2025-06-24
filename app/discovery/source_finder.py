@@ -13,7 +13,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.models import Source, Asset
-from .source_categorizer import SourceCategorizer
+from app.discovery.source_categorizer import SourceCategorizer
 
 
 @dataclass

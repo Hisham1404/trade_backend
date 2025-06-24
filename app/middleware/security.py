@@ -16,6 +16,9 @@ from app.auth.rate_limiter import check_rate_limit, get_client_identifier
 from app.core.config import settings
 
 
+
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
     Middleware for adding security headers to all responses.
@@ -81,6 +84,41 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         }
         
         # Add headers to response
+        for header, value in security_headers.items():
+            response.headers[header] = value
+        
+        return response
+
+
+class SecurityMiddleware(BaseHTTPMiddleware):
+    """
+    Comprehensive security middleware that combines multiple security features.
+    
+    This is a wrapper that provides a single entry point for security middleware,
+    combining headers, rate limiting, and request logging functionality.
+    """
+    
+    def __init__(self, app, debug: bool = False):
+        super().__init__(app)
+        self.debug = debug
+    
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """Apply comprehensive security measures to the request/response."""
+        # Apply rate limiting first
+        try:
+            await check_rate_limit(request)
+        except HTTPException as e:
+            return Response(
+                content=str(e.detail),
+                status_code=e.status_code,
+                headers=getattr(e, 'headers', {})
+            )
+        
+        # Process request
+        response = await call_next(request)
+        
+        # Apply security headers
+        security_headers = get_security_headers(self.debug)
         for header, value in security_headers.items():
             response.headers[header] = value
         
@@ -238,7 +276,7 @@ def setup_cors_middleware(app, environment: str = "development"):
         )
     else:
         # Restrictive CORS for production
-        allowed_origins = getattr(settings, 'ALLOWED_ORIGINS', [
+        allowed_origins = getattr(settings, 'allowed_origins_list', [
             "https://yourdomain.com",
             "https://api.yourdomain.com"
         ])
@@ -346,4 +384,62 @@ def validate_csrf_token(token: str, expected: str) -> bool:
     Returns:
         True if tokens match, False otherwise
     """
-    return token == expected and token is not None 
+    return token == expected and token is not None
+
+
+def get_security_headers(debug: bool = False) -> Dict[str, str]:
+    """
+    Get security headers dictionary for manual application.
+    
+    Args:
+        debug: Whether to use relaxed security headers for development
+        
+    Returns:
+        Dictionary of security headers
+    """
+    # Content Security Policy
+    csp_directives = [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-eval'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: https:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'"
+    ]
+    
+    if debug:
+        # Relax CSP for development
+        csp_directives = [
+            "default-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "connect-src 'self' http: https: ws: wss:"
+        ]
+    
+    return {
+        # Content Security Policy
+        "Content-Security-Policy": "; ".join(csp_directives),
+        
+        # XSS Protection
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        
+        # HTTPS and Transport Security
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        
+        # Referrer Policy
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        
+        # Permissions Policy
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=()",
+        
+        # Server identification
+        "Server": "Trading-Agent-API/1.0",
+        
+        # Cache control for sensitive endpoints
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    } 

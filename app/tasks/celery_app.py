@@ -33,7 +33,7 @@ celery_app.conf.update(
     # Task serialization
     task_serializer=settings.CELERY_TASK_SERIALIZER,
     result_serializer=settings.CELERY_RESULT_SERIALIZER,
-    accept_content=settings.CELERY_ACCEPT_CONTENT,
+    accept_content=settings.celery_accept_content_list,
     
     # Timezone configuration
     timezone=settings.CELERY_TIMEZONE,

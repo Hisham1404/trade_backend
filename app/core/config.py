@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings
-from pydantic import Field
-from typing import List, Optional
+from pydantic import Field, field_validator
+from typing import List, Optional, Union
 import os
 
 class Settings(BaseSettings):
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/1", description="Celery result backend URL")
     CELERY_TASK_SERIALIZER: str = Field(default="json", description="Task serialization format")
     CELERY_RESULT_SERIALIZER: str = Field(default="json", description="Result serialization format")
-    CELERY_ACCEPT_CONTENT: List[str] = Field(default=["json"], description="Accepted content types")
+    CELERY_ACCEPT_CONTENT: Union[str, List[str]] = Field(default="json", description="Accepted content types")
     CELERY_TIMEZONE: str = Field(default="UTC", description="Celery timezone")
     CELERY_ENABLE_UTC: bool = Field(default=True, description="Enable UTC timezone")
     CELERY_TASK_TRACK_STARTED: bool = Field(default=True, description="Track task started state")
@@ -60,7 +60,21 @@ class Settings(BaseSettings):
     CELERY_TASK_RESULT_EXPIRES: int = Field(default=3600, description="Task result expiration in seconds")
     
     # CORS
-    ALLOWED_ORIGINS: List[str] = Field(default=["http://localhost:3000", "http://localhost:8080"], description="Allowed CORS origins")
+    ALLOWED_ORIGINS: Union[str, List[str]] = Field(default="http://localhost:3000,http://localhost:8080", description="Allowed CORS origins")
+    
+    @property
+    def celery_accept_content_list(self) -> List[str]:
+        """Get CELERY_ACCEPT_CONTENT as a list"""
+        if isinstance(self.CELERY_ACCEPT_CONTENT, str):
+            return [item.strip() for item in self.CELERY_ACCEPT_CONTENT.split(',')]
+        return self.CELERY_ACCEPT_CONTENT if self.CELERY_ACCEPT_CONTENT else ["json"]
+    
+    @property
+    def allowed_origins_list(self) -> List[str]:
+        """Get ALLOWED_ORIGINS as a list"""
+        if isinstance(self.ALLOWED_ORIGINS, str):
+            return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(',')]
+        return self.ALLOWED_ORIGINS if self.ALLOWED_ORIGINS else ["http://localhost:3000", "http://localhost:8080"]
     
     # Logging
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")

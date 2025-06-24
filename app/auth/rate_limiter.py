@@ -34,3 +34,21 @@ def check_rate_limit(client_id, limiter=None):
     if limiter is None:
         limiter = RateLimiter()
     return limiter.check_rate_limit(client_id)
+
+def get_client_identifier(request):
+    """Extract client identifier from request for rate limiting"""
+    # Get client IP from request
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # Check for forwarded IP (if behind proxy)
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    
+    # Try to get user ID if authenticated
+    user_id = getattr(request.state, 'user_id', None)
+    if user_id:
+        return f"user:{user_id}"
+    
+    # Fall back to IP address
+    return f"ip:{client_ip}"

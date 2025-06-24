@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, description="Access token expiration")
     
     # Database
-    DATABASE_URL: str = "sqlite:///./trading_agent.db"
+    DATABASE_URL: str = Field(..., description="Database connection URL")
     DATABASE_URL_TEST: Optional[str] = Field(default=None, description="Test database URL")
     
     # External API Keys

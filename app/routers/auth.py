@@ -27,7 +27,7 @@ from app.auth.jwt_handler import (
 from app.auth.password_manager import (
     hash_password, verify_password, require_strong_password
 )
-from app.auth.rate_limiter import check_rate_limit
+from app.auth.rate_limiter import check_rate_limit, get_client_identifier
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 bearer_scheme = HTTPBearer()
@@ -46,7 +46,12 @@ async def register_user(
     generates API key, and returns user information.
     """
     # Check rate limiting
-    await check_rate_limit(request)
+    client_id = get_client_identifier(request)
+    if not check_rate_limit(client_id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please try again later."
+        )
     
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
@@ -71,9 +76,20 @@ async def register_user(
     # Generate API key
     api_key = str(uuid.uuid4())
     
+    # Generate username from email (before @)
+    username = user_data.email.split('@')[0]
+    
+    # Ensure username is unique by adding numbers if needed
+    base_username = username
+    counter = 1
+    while db.query(User).filter(User.username == username).first():
+        username = f"{base_username}{counter}"
+        counter += 1
+    
     # Create user
     new_user = User(
         email=user_data.email,
+        username=username,
         hashed_password=hashed_password,
         api_key=api_key,
         subscription_tier=user_data.subscription_tier.value,
@@ -103,7 +119,12 @@ async def login_user(
     for authenticated sessions.
     """
     # Check rate limiting
-    await check_rate_limit(request)
+    client_id = get_client_identifier(request)
+    if not check_rate_limit(client_id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please try again later."
+        )
     
     # Find user by email
     user = db.query(User).filter(User.email == login_data.email).first()
@@ -161,7 +182,12 @@ async def refresh_token(
     without requiring re-authentication.
     """
     # Check rate limiting
-    await check_rate_limit(request)
+    client_id = get_client_identifier(request)
+    if not check_rate_limit(client_id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please try again later."
+        )
     
     # Verify refresh token
     payload = verify_token(refresh_data.refresh_token)
@@ -303,7 +329,12 @@ async def request_password_reset(
     if account exists.
     """
     # Check rate limiting
-    await check_rate_limit(request)
+    client_id = get_client_identifier(request)
+    if not check_rate_limit(client_id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please try again later."
+        )
     
     # Find user by email
     user = db.query(User).filter(User.email == reset_data.email).first()
@@ -332,7 +363,12 @@ async def confirm_password_reset(
     to new secure password.
     """
     # Check rate limiting
-    await check_rate_limit(request)
+    client_id = get_client_identifier(request)
+    if not check_rate_limit(client_id):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please try again later."
+        )
     
     # Verify reset token (implement token validation)
     # For now, return error as token system not fully implemented

@@ -165,16 +165,22 @@ class SourceDiscovery:
                 title = soup.title.string if soup.title else "No Title"
                 
                 # Enhanced categorization using the new system
-                category_result = self.categorizer.categorize_source(url, title, content)
+                category_result = await self.categorizer.categorize_source(url, title, content)
                 
                 # Fallback to old analysis for backward compatibility
                 f_rev = ContentAnalyzer.analyze_financial_relevance(content, title)
                 c_qual = ContentAnalyzer.analyze_content_quality(soup, content)
                 
-                # Use the authority score from categorization as reliability score
-                score = category_result.authority_score + (category_result.confidence * 2.0)
+                # Use a more balanced scoring model
+                score = (
+                    (category_result.authority_score * 0.4) +  # 40% weight
+                    (f_rev * 10 * 0.3) +                       # 30% weight (f_rev is 0-1)
+                    (c_qual * 0.2) +                           # 20% weight (c_qual is 0-10)
+                    (category_result.confidence * 10 * 0.1)    # 10% weight
+                )
 
-                if score > 4.0 and category_result.confidence > 0.5:
+                # Adjusted filtering logic based on the new balanced score
+                if score >= 4.5:
                     return DiscoveredSource(
                         url=url, 
                         title=title, 

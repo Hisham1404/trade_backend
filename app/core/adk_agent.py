@@ -48,7 +48,8 @@ class TradingADKAgent:
                 return False
             
             # Set up environment for Google AI Studio (not Vertex AI)
-            os.environ["GOOGLE_API_KEY"] = self.settings.google_api_key
+            if self.settings.google_api_key:
+                os.environ["GOOGLE_API_KEY"] = str(self.settings.google_api_key)
             os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
             
             # Initialize session service
@@ -231,7 +232,7 @@ class TradingADKAgent:
     
     async def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Process a trading-related query using the ADK agent"""
-        if not self.initialized or not self.runner:
+        if not self.initialized or not self.runner or not self.session_service:
             return {
                 "status": "error",
                 "message": "Agent not initialized"
@@ -261,7 +262,7 @@ class TradingADKAgent:
             )
             
             # Run the agent asynchronously
-            events_stream = self.runner.runAsync(
+            events_stream = self.runner.run_async(
                 user_id=user_id,
                 session_id=session_id,
                 new_message=user_content
@@ -273,15 +274,17 @@ class TradingADKAgent:
             events = []
             
             # Process events from the stream
-            async for event in events_stream:
-                events.append(event)
-                if hasattr(event, 'content') and event.content:
-                    if hasattr(event.content, 'parts'):
-                        for part in event.content.parts:
-                            if hasattr(part, 'text'):
-                                response_text += part.text
-                if hasattr(event, 'tool_calls'):
-                    tool_calls.extend(event.tool_calls or [])
+            if events_stream:
+                async for event in events_stream:
+                    events.append(event)
+                    if hasattr(event, 'content') and event.content:
+                        if hasattr(event.content, 'parts'):
+                            for part in event.content.parts:
+                                if hasattr(part, 'text') and part.text:
+                                    response_text += str(part.text)
+                    # Check for tool calls with defensive access
+                    if hasattr(event, 'tool_calls') and event.tool_calls:
+                        tool_calls.extend(event.tool_calls)
             
             return {
                 "status": "success",

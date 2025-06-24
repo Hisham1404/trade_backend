@@ -16,6 +16,7 @@ class Portfolio(Base):
     description = Column(Text, nullable=True)
     
     # Portfolio value tracking
+    capital = Column(Numeric(15, 2), default=0.00)
     total_value = Column(Numeric(15, 2), default=0.00)
     cash_balance = Column(Numeric(15, 2), default=0.00)
     invested_amount = Column(Numeric(15, 2), default=0.00)

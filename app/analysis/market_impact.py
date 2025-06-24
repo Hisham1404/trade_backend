@@ -800,4 +800,11 @@ async def calculate_portfolio_impact(scorer: MarketImpactScorer,
             "NEUTRAL"
         )
     }
+
+
+# ---------------------------------------------------------------------------
+# Back-compat shim so external imports can use `MarketImpactAnalyzer`
+class MarketImpactAnalyzer(MarketImpactScorer):
+    """Alias wrapper for backward compatibility."""
+    pass
  

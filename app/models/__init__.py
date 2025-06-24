@@ -16,6 +16,10 @@ from .participant_flow import (
     ParticipantDataRetentionPolicy, ParticipantType, MarketSegment, 
     FlowDirection, ActivityType, DataSource, DataQuality
 )
+from .source_discovery import (
+    SourceScore, SourceMetadata, SourceHistory, DiscoveredContent,
+    SourceRelationship, SourceAnalytics
+)
 
 __all__ = [
     "User", "Portfolio", "Asset", "NewsItem", "Source", "Alert", 
@@ -28,5 +32,7 @@ __all__ = [
     "ParticipantProfile", "ParticipantActivity", "ParticipantFlowMetrics",
     "ParticipantFlowEvent", "ParticipantBehaviorPattern", "ParticipantFlowSummary",
     "ParticipantDataRetentionPolicy", "ParticipantType", "MarketSegment",
-    "FlowDirection", "ActivityType", "DataSource", "DataQuality"
+    "FlowDirection", "ActivityType", "DataSource", "DataQuality",
+    "SourceScore", "SourceMetadata", "SourceHistory", "DiscoveredContent",
+    "SourceRelationship", "SourceAnalytics"
 ] 

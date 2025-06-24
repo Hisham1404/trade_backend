@@ -16,13 +16,16 @@ class Source(Base):
     
     # Source metadata
     category = Column(String, nullable=True)  # financial, crypto, general
+    type = Column(String, nullable=True)  # official, news, social, general
     reliability_score = Column(Numeric(3, 2), default=5.0)  # 1-10 scale
     language = Column(String, default="en")
     
     # Source settings
     is_active = Column(Boolean, default=True)
     is_premium = Column(Boolean, default=False)
+    auto_discovered = Column(Boolean, default=False)  # Whether this was auto-discovered
     rate_limit_per_hour = Column(Integer, default=100)
+    check_frequency = Column(Integer, default=30)  # Minutes between checks
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -32,6 +35,12 @@ class Source(Base):
     
     # Relationships
     news_items = relationship("NewsItem", back_populates="source")
+    scores = relationship("SourceScore", back_populates="source")
+    source_metadata = relationship("SourceMetadata", back_populates="source", uselist=False)
+    history = relationship("SourceHistory", back_populates="source")
+    discovered_content = relationship("DiscoveredContent", back_populates="source")
+    source_relationships = relationship("SourceRelationship", foreign_keys="SourceRelationship.source_id", back_populates="source")
+    analytics = relationship("SourceAnalytics", back_populates="source", uselist=False)
     
     def __repr__(self):
         return f"<Source(id={self.id}, name='{self.name}')>"
@@ -83,6 +92,7 @@ class NewsItem(Base):
     
     # Relationships
     source = relationship("Source", back_populates="news_items")
+    discovery_data = relationship("DiscoveredContent", back_populates="news_item", uselist=False)
     
     def __repr__(self):
         return f"<NewsItem(id={self.id}, title='{self.title[:50]}...', source_id={self.source_id})>" 

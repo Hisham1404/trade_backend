@@ -596,4 +596,11 @@ def calculate_support_resistance(option_data: List[Dict]) -> Dict[str, List[floa
     return {
         'support_levels': support,
         'resistance_levels': resistance
-    } 
+    }
+
+# ---------------------------------------------------------------------------
+# Back-compat shim so external callers can still import `OptionAnalytics`
+class OptionAnalytics(OptionAnalyticsEngine):
+    """Alias for backward compatibility – inherits from OptionAnalyticsEngine."""
+
+    pass 

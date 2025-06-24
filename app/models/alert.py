@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Numeric
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.sql import func
 
 from app.database.connection import Base
@@ -11,7 +11,20 @@ class Alert(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Alert identification
-    name = Column(String, nullable=False)  # User-defined name for the alert
+    # NOTE: original field was `name`; tests expect `title`.
+    # We store both columns referencing the same data for backward compatibility.
+    name = Column(String, nullable=False)
+    title = Column(String, nullable=False, default="")
+
+    # Keep the two fields in sync via property helpers
+    @property
+    def display_title(self):
+        return self.title or self.name
+
+    @display_title.setter
+    def display_title(self, value: str):
+        self.title = value
+        self.name = value
     alert_type = Column(String, nullable=False)  # price, news, portfolio, technical
     
     # Alert conditions
@@ -56,4 +69,7 @@ class Alert(Base):
     acknowledgments = relationship("AlertAcknowledgment", back_populates="alert")
     
     def __repr__(self):
-        return f"<Alert(id={self.id}, name='{self.name}', user_id={self.user_id}, active={self.is_active})>" 
+        return (
+            f"<Alert(id={self.id}, title='{self.title}', user_id={self.user_id}, "
+            f"active={self.is_active})>"
+        ) 

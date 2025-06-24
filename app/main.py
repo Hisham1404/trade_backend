@@ -8,7 +8,7 @@ import logging
 
 from app.database.connection import create_db_and_tables
 from app.core.config import settings
-from app.routers import auth, users, portfolio, assets, news, alerts, scrapers, monitoring, adk, sentiment, feeds, market_impact, websockets, push_notifications, delivery_tracking, acknowledgments
+from app.routers import auth, users, portfolio, assets, news, alerts, monitoring, adk, sentiment, feeds, market_impact, websockets, push_notifications, delivery_tracking, acknowledgments, analysis_endpoints
 from app.routers import celery_monitoring
 from app.services import setup_logging
 from app.services.monitoring_service import monitoring_service
@@ -29,9 +29,7 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up Trading Intelligence Agent...")
     await create_db_and_tables()
-    # Start background scraping every 30 minutes
-    from app.scrapers.manager import scraper_manager
-    scraper_manager.start_background_scraping(interval_minutes=30, min_check_interval=30)
+    
     # Start monitoring service
     await monitoring_service.start_monitoring(
         health_check_interval=60,  # Check health every minute
@@ -108,8 +106,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     logger.info("Shutting down Trading Intelligence Agent...")
-    # Stop background scraping gracefully
-    await scraper_manager.stop_background_scraping()
+    
     # Stop monitoring service
     await monitoring_service.stop_monitoring()
     # Shutdown ADK service
@@ -210,7 +207,6 @@ app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["assets"])
 app.include_router(news.router, prefix="/api/v1/news", tags=["news"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
-app.include_router(scrapers.router, prefix="/api/v1", tags=["scrapers"])
 app.include_router(adk.router, prefix="/api/v1", tags=["adk"])
 app.include_router(sentiment.router, prefix="/api/v1", tags=["sentiment"])
 app.include_router(feeds.router, prefix="/api/v1/feeds", tags=["feeds"])
@@ -222,6 +218,7 @@ app.include_router(push_notifications.router)
 app.include_router(delivery_tracking.router)
 app.include_router(acknowledgments.router)
 app.include_router(celery_monitoring.router)
+app.include_router(analysis_endpoints.router)
 
 if __name__ == "__main__":
     import uvicorn

@@ -253,4 +253,10 @@ def is_market_open(exchange: str = "NSE") -> bool:
 def should_fetch_option_data(exchange: str = "NSE") -> bool:
     """Check if we should fetch option data now"""
     manager = MarketHoursManager()
-    return manager.should_fetch_data(exchange) 
+    return manager.should_fetch_data(exchange)
+
+# ---------------------------------------------------------------------------
+# Back-compat shim so external imports can use `MarketHours`
+class MarketHours(MarketHoursManager):
+    """Alias class – inherits from MarketHoursManager for backward compatibility."""
+    pass 
